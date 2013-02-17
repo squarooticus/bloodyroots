@@ -1,0 +1,45 @@
+{
+  "name": "bloodyroots",
+  "version": "0.0.1",
+  "description": "Recursive descent parser",
+  "main": "bloodyroots.js",
+  "directories": {
+    "lib": "lib",
+    "example": "example",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "cake test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/squarooticus/bloodyroots.git"
+  },
+  "keywords": [
+    "recursive",
+    "descent",
+    "parser",
+    "context",
+    "free",
+    "grammar"
+  ],
+  "author": {
+    "name": "Kyle Rose",
+    "email": "krose@krose.org",
+    "url": "http://www.krose.org/~krose/"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "coffee-script" : "*",
+    "regexp-quote" : "*"
+  },
+  "devDependencies": {
+    "chai" : "*",
+    "deep-equal" : "*",
+    "mocha" : "*",
+    "should" : "*"
+  },
+  "scripts": {
+    "prepublish": "cake build"
+  }
+}
