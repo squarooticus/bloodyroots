@@ -16,7 +16,7 @@ class Parser
   @def_grammar_op 'first'
   @def_grammar_op 'range'
   @def_grammar_op 'range_nongreedy'
-  @def_grammar_op 're', (re_str, match_name) -> this.prototype.match_var_re re_str, match_name
+  @def_grammar_op 're', (re_str, match_name) -> this.prototype.match_re RegExp('^(?:' + re_str + ')'), match_name
   @def_grammar_op 'seq'
   @def_grammar_op 'transform', (f, beta) -> this.prototype.op_transform f, beta
   @def_grammar_op 'v'
