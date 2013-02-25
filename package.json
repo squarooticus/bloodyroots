@@ -1,6 +1,6 @@
 {
   "name": "bloodyroots",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Recursive descent parser",
   "main": "bloodyroots.js",
   "directories": {
@@ -9,7 +9,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "cake test"
+    "prepublish": "cake build"
   },
   "repository": {
     "type": "git",
@@ -30,16 +30,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "coffee-script" : "*",
-    "regexp-quote" : "*"
+    "coffee-script": "*",
+    "regexp-quote": "*"
   },
   "devDependencies": {
-    "chai" : "*",
-    "deep-equal" : "*",
-    "mocha" : "*",
-    "should" : "*"
-  },
-  "scripts": {
-    "prepublish": "cake build"
+    "chai": "*",
+    "deep-equal": "*",
+    "mocha": "*",
+    "should": "*"
   }
 }
