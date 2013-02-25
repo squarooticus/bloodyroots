@@ -4,79 +4,36 @@ inspect = (x) -> inspect_orig(x, false, null)
 
 class Parser
   @defp: (alpha_s, beta) ->
-    this.prototype[alpha_s] = (vdata, idx) -> beta.op.call(this, vdata, idx)
+    this.prototype[alpha_s] = (vdata, idx) ->
+      beta.op.call(this, vdata, idx)
 
-  @at_least_one: (beta) ->
-    {
-      type: 'range',
-      op: this.prototype.match_range(beta, 1),
-    }
+  @def_grammar_op: (name, op_f) ->
+    this[name] = (varargs) ->
+      args = [].splice.call(arguments, 0)
+      { name: name, op: if op_f? then op_f.apply(this, args) else this.prototype['match_' + name].apply(this, args) }
 
-  @first: (varargs) ->
-    beta_seq = [].splice.call(arguments,0)
-    {
-      type: 'first',
-      op: this.prototype.match_first(beta_seq),
-    }
-
-  @range: (beta, min, max) ->
-    {
-      type: 'range',
-      op: this.prototype.match_range(beta, min, max),
-    }
-
-  @range_nongreedy: (beta, min, max, suffix) ->
-    {
-      type: 'range_nongreedy',
-      op: this.prototype.match_range_nongreedy(beta, min, max, suffix),
-    }
-
-  @re: (re_str, match_name) ->
-    {
-      type: 're',
-      op: this.prototype.match_re(RegExp('^(?:' + re_str + ')'), match_name),
-    }
-
-  @seq: (varargs) ->
-    beta_seq = [].splice.call(arguments,0)
-    {
-      type: 'seq',
-      op: this.prototype.match_seq(beta_seq),
-    }
-
-  @transform: (f, beta) ->
-    {
-      type: 'transform',
-      op: this.prototype.op_transform(f, beta),
-    }
-
-  @v: (alpha_s, argf) ->
-    {
-      type: 'v',
-      op: this.prototype.match_v(alpha_s, argf),
-    }
-
-  @var_re: (re_str, match_name) ->
-    {
-      type: 'var_re',
-      op: this.prototype.match_var_re(re_str, match_name),
-    }
-
-  @zero_or_more: (beta) ->
-    {
-      type: 'range',
-      op: this.prototype.match_range(beta, 0),
-    }
+  @def_grammar_op 'at_least_one', (beta) -> this.prototype.match_range(beta, 1)
+  @def_grammar_op 'first'
+  @def_grammar_op 'range'
+  @def_grammar_op 'range_nongreedy'
+  @def_grammar_op 're', (re_str, match_name) -> this.prototype.match_var_re(re_str, match_name)
+  @def_grammar_op 'seq'
+  @def_grammar_op 'transform', (f, beta) -> this.prototype.op_transform(f, beta)
+  @def_grammar_op 'v'
+  @def_grammar_op 'var_re'
+  @def_grammar_op 'zero_or_more', (beta) -> this.prototype.match_range(beta, 0)
 
   @backref: (ref) -> (vdata) ->
     m = /^([^\[]*)\[([0-9]*)\]/.exec(ref)
     [ (vdata[m[1]] || [ ])[m[2]], ]
 
-  match_first: (beta_seq) -> (vdata, idx) ->
-    for beta in beta_seq
-      m = beta.op.call(this, vdata, idx)
-      return m if m?
-    undefined
+  match_first: (varargs) ->
+    beta_seq = [].splice.call(arguments, 0)
+    (vdata, idx) ->
+      for beta in beta_seq
+        m = beta.op.call(this, vdata, idx)
+        return m if m?
+      undefined
 
   match_range: (beta, min, max) -> (vdata, idx) ->
     count = 0
@@ -117,15 +74,17 @@ class Parser
     else
       undefined
 
-  match_seq: (beta_seq) -> (vdata, idx) ->
-    progress = 0
-    work = [ ]
-    for beta in beta_seq
-      m = beta.op.call(this, vdata, idx + progress)
-      return undefined unless m?
-      progress += m[0]
-      work.push(m[1])
-    [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
+  match_seq: (varargs) ->
+    beta_seq = [].splice.call(arguments, 0)
+    (vdata, idx) ->
+      progress = 0
+      work = [ ]
+      for beta in beta_seq
+        m = beta.op.call(this, vdata, idx + progress)
+        return undefined unless m?
+        progress += m[0]
+        work.push(m[1])
+      [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
 
   match_v: (alpha_s, argf) -> (vdata, idx) ->
     new_vdata = { }
