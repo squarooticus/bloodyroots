@@ -11,7 +11,7 @@ A JavaScript engine for recursive descent parsing of context-free grammars, writ
 
 ## Suggestions:
 
-See `parser.coffee` in `test/` for a good example of how to implement a grammar: `BBCodeParser` is an early version of what I wrote this code for. It parses a variant of BBCode that I use in my old Perl-based forum software that is now long in the tooth.
+See `test/parser.coffee` for a good example of how to implement a grammar: `BBCodeParser` is an early version of what I wrote this code for. It parses a variant of BBCode that I use in my old Perl-based forum software that is now long in the tooth and probably full of security holes. (Sssh! Don't tell anyone.)
 
 ## To do:
 

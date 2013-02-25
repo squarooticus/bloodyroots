@@ -4,8 +4,8 @@ REPORTER = "list"
  
 task "build", "build the files", ->
   exec "coffee -c -o lib/ src/", (err, output) ->
-    throw err if err
     console.log output
+    throw err if err
 
 task "watch", "watch and build the files", ->
   exec "coffee -cw -o lib/ src/"
