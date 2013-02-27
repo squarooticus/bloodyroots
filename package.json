@@ -31,7 +31,8 @@
   "license": "MIT",
   "dependencies": {
     "coffee-script": "*",
-    "regexp-quote": "*"
+    "regexp-quote": "*",
+    "sprintf.js": "*"
   },
   "devDependencies": {
     "chai": "*",

@@ -1,51 +1,77 @@
 re_quote = require('regexp-quote')
 inspect_orig = require('util').inspect
 inspect = (x) -> inspect_orig(x, false, null)
+require('sprintf.js')
 
 class Parser
-  @defp: (alpha_s, beta) ->
-    this.prototype[alpha_s] = (vdata, idx) ->
+  @define_production: (alpha_s, beta) ->
+    @prototype[alpha_s] = (vdata, idx) ->
       beta.op.call(this, vdata, idx)
 
-  @def_grammar_op: (name, op_f) ->
+  @define_grammar_operation: (name, op_f) ->
     this[name] = (varargs) ->
       args = [].splice.call arguments, 0
-      { name: name, op: if op_f? then op_f.apply this, args else this.prototype['match_' + name].apply this, args }
+      { name: name, op: if op_f? then op_f.apply this, args else @prototype['match_' + name].apply this, args }
 
-  @def_grammar_op 'at_least_one', (beta) -> this.prototype.match_range beta, 1
-  @def_grammar_op 'first'
-  @def_grammar_op 'range'
-  @def_grammar_op 'range_nongreedy'
-  @def_grammar_op 're', (re_str, match_name) -> this.prototype.match_re RegExp('^(?:' + re_str + ')'), match_name
-  @def_grammar_op 'seq'
-  @def_grammar_op 'transform', (f, beta) -> this.prototype.op_transform f, beta
-  @def_grammar_op 'v'
-  @def_grammar_op 'var_re'
-  @def_grammar_op 'zero_or_more', (beta) -> this.prototype.match_range beta, 0
+  @define_grammar_operation 'at_least_one', (beta) -> @prototype.match_range beta, 1
+  @define_grammar_operation 'alternation'
+  @define_grammar_operation 'range'
+  @define_grammar_operation 'range_nongreedy'
+  @define_grammar_operation 're', (re_str, match_name) -> @prototype.match_re RegExp('^(?:' + re_str + ')'), match_name
+  @define_grammar_operation 'seq'
+  @define_grammar_operation 'transform', (f, beta) -> @prototype.op_transform f, beta
+  @define_grammar_operation 'v'
+  @define_grammar_operation 'var_re'
+  @define_grammar_operation 'zero_or_more', (beta) -> @prototype.match_range beta, 0
 
   @backref: (ref) -> (vdata) ->
     m = /^([^\[]*)\[([0-9]*)\]/.exec(ref)
     [ (vdata[m[1]] || [ ])[m[2]], ]
 
-  match_first: (varargs) ->
+  debug_log: (f) ->
+    if this.constructor.debug
+      [ name, idx, outcome, data ] = f()
+      '%-15s: %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
+
+  string_abbrev: (start, n) ->
+    istr = inspect @str
+    istr = istr.substr 1, istr.length-2
+    if istr.length < start + n
+      istr.substr(start)
+    else
+      istr.substr(start, n - 3) + '...'
+
+  match_alternation: (varargs) ->
     beta_seq = [].splice.call arguments, 0
     (vdata, idx) ->
+      this.debug_log -> [ 'alternation', idx, 'begin', [ beta.name for beta in beta_seq ] ]
+      i = 0
       for beta in beta_seq
+        this.debug_log -> [ 'alternation', idx, 'i='+i, beta.name ]
         m = beta.op.call this, vdata, idx
-        return m if m?
+        if m?
+          this.debug_log -> [ 'alternation', idx, 'success' ]
+          return m
+        i++
+      this.debug_log -> [ 'alternation', idx, 'fail' ]
       undefined
 
   match_range: (beta, min, max) -> (vdata, idx) ->
+    this.debug_log -> [ 'range', idx, 'begin', '%s min=%d max=%d'.sprintf beta.name, min, max ]
     count = 0
     progress = 0
     work = []
     while not max? or count < max
+      this.debug_log -> [ 'range', idx, 'i='+count ]
       m = beta.op.call this, vdata, idx + progress
       break unless m?
       progress += m[0]
       work.push m[1]
       count++
-    return undefined if min? and count < min
+    if min? and count < min
+      this.debug_log -> [ 'range', idx, 'fail' ]
+      return undefined
+    this.debug_log -> [ 'range', idx, 'success', 'count=%d'.sprintf count ]
     [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
 
   match_range_nongreedy: (beta, min, max, suffix) -> (vdata, idx) ->

@@ -4,7 +4,7 @@ describe 'Parser', ->
   describe 'unit tests', ->
     describe 'at_least_one', ->
       class TestParser1 extends Parser
-        @defp('Document', @at_least_one( @re('abc')))
+        @define_production('Document', @at_least_one( @re('abc')))
 
       p = new TestParser1()
 
@@ -32,14 +32,14 @@ describe 'Parser', ->
         it 'should parse', ->
           assert deep_equal(r, r_correct)
     
-    describe 'range', ->
+    describe 'testing range', ->
       class TestParser1 extends Parser
-        @defp('Document', @v('non-greedy-test-1'))
-        @defp('non-greedy-test-1', @range_nongreedy( @re('abc'), 3, 7, @re('abcdef')))
+        @define_production('Document', @v('non-greedy-test-1'))
+        @define_production('non-greedy-test-1', @range_nongreedy( @re('abc'), 3, 7, @re('abcdef')))
 
       class TestParser2 extends Parser
-        @defp('Document', @seq( @v('non-greedy-test-2'), @re('abcdef')))
-        @defp('non-greedy-test-2', @range( @re('abc'), 3, 7))
+        @define_production('Document', @seq( @v('non-greedy-test-2'), @re('abcdef')))
+        @define_production('non-greedy-test-2', @range( @re('abc'), 3, 7))
 
       c = new TestParser1()
       d = new TestParser2()
@@ -86,30 +86,30 @@ describe 'Parser', ->
       }
 
     class BBCodeParser extends Parser
-      debug = true
+      @debug = true
       
-      @defp('Document',
+      @define_production('Document',
         @transform(seq2array,
           @zero_or_more(
-            @first(
+            @alternation(
               @v('Element'),
               @v('TagOrText')))))
 
-      @defp('Element',
+      @define_production('Element',
         @transform(element,
           @seq(
             @re('\\[([A-Za-z]*)(?:=([^\\]]*))?\\]', 'opentag'),
             @transform(seq2array,
               @zero_or_more(
-                @first(
+                @alternation(
                   @v('Element'),
                   @v('NotSpecificCloseTag', @backref('opentag[1]'))))),
             @var_re('\\[/\\=opentag[1]\\]'))))
 
-      @defp('NotSpecificCloseTag',
+      @define_production('NotSpecificCloseTag',
         @transform(text, @var_re('\\[/(?!\\=arg[0]\\])[^\\]]*\\]|\\[(?:[^/][^\\]]*)?\\]|[^\\[]+')))
 
-      @defp('TagOrText', @transform(text, @re('\\[[^\\]]*\\]|[^\\[]+')))
+      @define_production('TagOrText', @transform(text, @re('\\[[^\\]]*\\]|[^\\[]+')))
 
     b = new BBCodeParser()
 
