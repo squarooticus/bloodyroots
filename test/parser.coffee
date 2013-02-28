@@ -34,19 +34,27 @@ describe 'Parser', ->
     
     describe 'testing range', ->
       class TestParser1 extends Parser
-        @define_production('Document', @v('non-greedy-test-1'))
-        @define_production('non-greedy-test-1', @range_nongreedy( @re('abc'), 3, 7, @re('abcdef')))
+        @debug = true
+        @define_production('Document', @v('range-test-1'))
+        @define_production('range-test-1', @range( @re('abc'), 3, 7, false, @re('abcdef')))
 
       class TestParser2 extends Parser
-        @define_production('Document', @seq( @v('non-greedy-test-2'), @re('abcdef')))
-        @define_production('non-greedy-test-2', @range( @re('abc'), 3, 7))
+        @debug = true
+        @define_production('Document', @v('range-test-2'))
+        @define_production('range-test-2', @range( @re('abc'), 3, 7, true, @re('abcdef')))
 
-      c = new TestParser1()
-      d = new TestParser2()
+      class TestParser3 extends Parser
+        @debug = true
+        @define_production('Document', @seq( @v('range-test-3'), @re('abcdef')))
+        @define_production('range-test-3', @range( @re('abc'), 3, 7, true))
 
-      describe 'with range_nongreedy', ->
-        r2 = c.parse('abcabcabcabcdef')
-        r2_correct = `{ pos: 0,
+      tp1 = new TestParser1()
+      tp2 = new TestParser2()
+      tp3 = new TestParser3()
+
+      describe 'non-greedy with suffix', ->
+        r = tp1.parse('abcabcabcabcdef')
+        r_correct = `{ pos: 0,
           length: 15,
           type: 'seq',
           seq: 
@@ -59,14 +67,32 @@ describe 'Parser', ->
                match: 'abcdef',
                groups: [ 'abcdef' ] } ] }`
 
-        it 'should parse greedy trap', ->
-          assert deep_equal(r2, r2_correct)
+        it 'should parse', ->
+          assert deep_equal(r, r_correct)
 
-      describe 'with range', ->
-        r3 = d.parse('abcabcabcabcdef')
+      describe 'greedy with suffix', ->
+        r = tp2.parse('abcabcabcabcdef')
+        r_correct = `{ pos: 0,
+          length: 15,
+          type: 'seq',
+          seq: 
+           [ { pos: 0, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
+             { pos: 3, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
+             { pos: 6, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
+             { pos: 9,
+               length: 6,
+               type: 're',
+               match: 'abcdef',
+               groups: [ 'abcdef' ] } ] }`
 
-        it 'should fail on greedy trap', ->
-          assert not r3?
+        it 'should parse', ->
+          assert deep_equal(r, r_correct)
+
+      describe 'greedy without suffix', ->
+        r = tp3.parse('abcabcabcabcdef')
+
+        it 'should fail', ->
+          assert not r?
 
   describe 'with BBCode', ->
     element = (elt) ->
@@ -86,8 +112,6 @@ describe 'Parser', ->
       }
 
     class BBCodeParser extends Parser
-      @debug = true
-      
       @define_production('Document',
         @transform(seq2array,
           @zero_or_more(

@@ -13,16 +13,16 @@ class Parser
       args = [].splice.call arguments, 0
       { name: name, op: if op_f? then op_f.apply this, args else @prototype['match_' + name].apply this, args }
 
-  @define_grammar_operation 'at_least_one', (beta) -> @prototype.match_range beta, 1
+  @define_grammar_operation 'at_least_one', (beta, suffix) -> @prototype.match_range beta, 1, undefined, true, suffix
   @define_grammar_operation 'alternation'
   @define_grammar_operation 'range'
-  @define_grammar_operation 'range_nongreedy'
   @define_grammar_operation 're', (re_str, match_name) -> @prototype.match_re RegExp('^(?:' + re_str + ')'), match_name
   @define_grammar_operation 'seq'
   @define_grammar_operation 'transform', (f, beta) -> @prototype.op_transform f, beta
   @define_grammar_operation 'v'
   @define_grammar_operation 'var_re'
-  @define_grammar_operation 'zero_or_more', (beta) -> @prototype.match_range beta, 0
+  @define_grammar_operation 'zero_or_more', (beta, suffix) -> @prototype.match_range beta, 0, undefined, true, suffix
+  @define_grammar_operation 'zero_or_one', (beta, suffix) -> @prototype.match_range beta, 0, 1, true, suffix
 
   @backref: (ref) -> (vdata) ->
     m = /^([^\[]*)\[([0-9]*)\]/.exec(ref)
@@ -56,48 +56,96 @@ class Parser
       this.debug_log -> [ 'alternation', idx, 'fail' ]
       undefined
 
-  match_range: (beta, min, max) -> (vdata, idx) ->
-    this.debug_log -> [ 'range', idx, 'begin', '%s min=%d max=%d'.sprintf beta.name, min, max ]
+  match_range: (beta, min=0, max, greedy=true, suffix) -> (vdata, idx) ->
+    this.debug_log -> [ 'range', idx, 'begin',
+      '%s min=%s max=%s greedy=%s suffix=%s'.sprintf beta.name, min, (if max? then max else ''),
+        greedy, (if suffix? then suffix.name else '') ]
     count = 0
     progress = 0
     work = []
+    # This logic is complex because of all the cases (and because I
+    # don't want to do it recursively, which would simplify the logic
+    # but expose the parser to range limitations), so I'll
+    # explain. First, try to get to min matches and bail out if that
+    # fails.
+    while count < min
+      this.debug_log -> [ 'range', idx + progress, 'i='+count, '<min' ]
+      m = beta.op.call this, vdata, idx + progress
+      unless m?
+        this.debug_log -> [ 'range', idx + progress, 'fail' ]
+        return undefined
+      progress += m[0]
+      work.push m[1]
+      count++
+    # invariant: count == min.
+    #
+    # If we're not greedy, check the suffix before we start moving up
+    # to max, or return successfully if there is no suffix.
+    if not greedy
+      if suffix?
+        m = suffix.op.call this, vdata, idx + progress
+        if m?
+          progress += m[0]
+          work.push m[1]
+          this.debug_log -> [ 'range', idx + progress, 'success', 'non-greedy' ]
+          return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
+      else
+        this.debug_log -> [ 'range', idx + progress, 'success', 'non-greedy no suffix trivial' ]
+        return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
+    # invariant: greedy || suffix?
+    #
+    # Now, count up to max or the last match. If greedy, wait until
+    # the downswing before checking suffix; otherwise, check on the
+    # way up and succeed if the suffix matches.
+    greedy_progress = [ progress ] if greedy
     while not max? or count < max
-      this.debug_log -> [ 'range', idx, 'i='+count ]
+      this.debug_log -> [ 'range', idx + progress, 'i='+count, '>=min' ]
       m = beta.op.call this, vdata, idx + progress
       break unless m?
       progress += m[0]
       work.push m[1]
       count++
-    if min? and count < min
-      this.debug_log -> [ 'range', idx, 'fail' ]
-      return undefined
-    this.debug_log -> [ 'range', idx, 'success', 'count=%d'.sprintf count ]
-    [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
-
-  match_range_nongreedy: (beta, min, max, suffix) -> (vdata, idx) ->
-    count = 0
-    progress = 0
-    work = []
-    while not max? or count < max
-      m = beta.op.call this, vdata, idx + progress
-      break unless m?
-      progress += m[0]
-      work.push m[1]
-      count++
-      if not min? or count >= min
+      if greedy
+        greedy_progress.push(progress)
+      else
         m2 = suffix.op.call this, vdata, idx + progress
         if m2?
           progress += m2[0]
           work.push m2[1]
+          this.debug_log -> [ 'range', idx + progress, 'success', 'non-greedy' ]
           return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
+    # If we're not greedy, we failed, so bail out.
+    unless greedy
+      this.debug_log -> [ 'range', idx + progress, 'fail', '>=min non-greedy' ]
+      return undefined
+    # We're greedy. Go back down through the saved greedy indexes,
+    # checking to see if the suffix matches.
+    while greedy_progress.length
+      this.debug_log -> [ 'range', idx + progress, 'i='+count, 'greedy backtracking' ]
+      progress = greedy_progress.pop()
+      if suffix
+        m2 = suffix.op.call this, vdata, idx + progress
+        if m2?
+          progress += m2[0]
+          work.push m2[1]
+          this.debug_log -> [ 'range', idx + progress, 'success', 'greedy backtracking' ]
+          return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
+      else
+        this.debug_log -> [ 'range', idx + progress, 'success', 'greedy backtracking no suffix' ]
+        return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
+      work.pop()
+    # No match. Fail.
+    this.debug_log -> [ 'range', idx + progress, 'fail', 'greedy backtracking' ]
     undefined
 
   match_re: (rre, match_name) -> (vdata, idx) ->
     m = rre.exec @str.substr idx
     if m
+      this.debug_log -> [ 're', idx, 'success', inspect rre.source ]
       vdata[match_name] = m[0..-1] if match_name?
       [ m[0].length, { pos: idx, length: m[0].length, type: 're', match: m[0], groups: m[0..-1] } ]
     else
+      this.debug_log -> [ 're', idx, 'fail', inspect rre.source ]
       undefined
 
   match_seq: (varargs) ->
