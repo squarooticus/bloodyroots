@@ -2,6 +2,7 @@ re_quote = require('regexp-quote')
 inspect_orig = require('util').inspect
 inspect = (x) -> inspect_orig(x, false, null)
 require('sprintf.js')
+typeIsArray = Array.isArray || ( value ) -> return {}.toString.call( value ) is '[object Array]'
 
 class Parser
   @define_production: (alpha_s, beta) ->
@@ -31,7 +32,7 @@ class Parser
   debug_log: (f) ->
     if this.constructor.debug
       [ name, idx, outcome, data ] = f()
-      '%-15s: %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
+      '%-15s %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
 
   string_abbrev: (start, n) ->
     istr = inspect @str
@@ -42,32 +43,45 @@ class Parser
       istr.substr(start, n - 3) + '...'
 
   match_alternation: (varargs) ->
-    beta_seq = [].splice.call arguments, 0
+    if typeIsArray varargs
+      beta_seq = varargs
+      suffix = arguments[1]
+    else
+      beta_seq = [].splice.call arguments, 0
     (vdata, idx) ->
-      this.debug_log -> [ 'alternation', idx, 'begin', [ beta.name for beta in beta_seq ] ]
+      this.debug_log -> [ 'alternation', idx, 'begin', 'alternation=%s%s'.sprintf (beta.name for beta in beta_seq), (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
       i = 0
       for beta in beta_seq
         this.debug_log -> [ 'alternation', idx, 'i='+i, beta.name ]
         m = beta.op.call this, vdata, idx
         if m?
-          this.debug_log -> [ 'alternation', idx, 'success' ]
-          return m
+          if suffix?
+            m2 = suffix.op.call this, vdata, idx + m[0]
+            if m2?
+              this.debug_log -> [ 'alternation', idx, 'success', 'count='+(i+1) ]
+              return [ m[0] + m2[0], { pos: idx, length: m[0] + m2[0], type: 'seq', seq: [ m[1], m2[1] ] } ]
+          else
+            this.debug_log -> [ 'alternation', idx, 'success', 'count=%d'.sprintf (i+1) ]
+            return m
         i++
       this.debug_log -> [ 'alternation', idx, 'fail' ]
       undefined
 
   match_range: (beta, min=0, max, greedy=true, suffix) -> (vdata, idx) ->
     this.debug_log -> [ 'range', idx, 'begin',
-      '%s min=%s max=%s greedy=%s suffix=%s'.sprintf beta.name, min, (if max? then max else ''),
-        greedy, (if suffix? then suffix.name else '') ]
+      '%s min=%s max=%s greedy=%s%s'.sprintf beta.name, min, (if max? then max else ''),
+        greedy, (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
+    return undefined if min > max
     count = 0
     progress = 0
     work = []
     # This logic is complex because of all the cases (and because I
     # don't want to do it recursively, which would simplify the logic
-    # but expose the parser to range limitations), so I'll
-    # explain. First, try to get to min matches and bail out if that
-    # fails.
+    # but expose the parser to range limitations), so I'll explain
+    # with invariants to make the explanation clearer. If anyone can
+    # think of a way to break this up into smaller bits, by all means.
+    #
+    # First, try to get to min matches and bail out if that fails.
     while count < min
       this.debug_log -> [ 'range', idx + progress, 'i='+count, '<min' ]
       m = beta.op.call this, vdata, idx + progress
@@ -87,16 +101,17 @@ class Parser
         if m?
           progress += m[0]
           work.push m[1]
-          this.debug_log -> [ 'range', idx + progress, 'success', 'non-greedy' ]
+          this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d non-greedy'.sprintf(count) ]
           return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
       else
-        this.debug_log -> [ 'range', idx + progress, 'success', 'non-greedy no suffix trivial' ]
+        this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d non-greedy no-suffix trivial'.sprintf(count) ]
         return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
     # invariant: greedy || suffix?
     #
     # Now, count up to max or the last match. If greedy, wait until
-    # the downswing before checking suffix; otherwise, check on the
-    # way up and succeed if the suffix matches.
+    # the downswing before checking suffix, saving the string indexes
+    # to check on the way back down; otherwise, check on the way up
+    # and succeed if the suffix matches.
     greedy_progress = [ progress ] if greedy
     while not max? or count < max
       this.debug_log -> [ 'range', idx + progress, 'i='+count, '>=min' ]
@@ -112,7 +127,7 @@ class Parser
         if m2?
           progress += m2[0]
           work.push m2[1]
-          this.debug_log -> [ 'range', idx + progress, 'success', 'non-greedy' ]
+          this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d non-greedy'.sprintf(count) ]
           return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
     # If we're not greedy, we failed, so bail out.
     unless greedy
@@ -121,19 +136,20 @@ class Parser
     # We're greedy. Go back down through the saved greedy indexes,
     # checking to see if the suffix matches.
     while greedy_progress.length
-      this.debug_log -> [ 'range', idx + progress, 'i='+count, 'greedy backtracking' ]
       progress = greedy_progress.pop()
+      this.debug_log -> [ 'range', idx + progress, 'i='+count, 'greedy backtracking' ]
       if suffix
         m2 = suffix.op.call this, vdata, idx + progress
         if m2?
           progress += m2[0]
           work.push m2[1]
-          this.debug_log -> [ 'range', idx + progress, 'success', 'greedy backtracking' ]
+          this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d greedy backtracking'.sprintf(count) ]
           return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
       else
-        this.debug_log -> [ 'range', idx + progress, 'success', 'greedy backtracking no suffix' ]
+        this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d greedy backtracking no-suffix'.sprintf(count) ]
         return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
       work.pop()
+      count--
     # No match. Fail.
     this.debug_log -> [ 'range', idx + progress, 'fail', 'greedy backtracking' ]
     undefined

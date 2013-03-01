@@ -1,4 +1,4 @@
-REPORTER = "list"
+REPORTER = "dot"
 
 {exec} = require 'child_process'
  

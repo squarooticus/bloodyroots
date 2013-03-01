@@ -1,12 +1,15 @@
 { Parser } = require('../lib/bloodyroots')
 
+String.prototype.repeat = (num) ->
+  new Array( num + 1 ).join( this );
+
 describe 'Parser', ->
   describe 'unit tests', ->
     describe 'at_least_one', ->
-      class TestParser1 extends Parser
+      class TestParser extends Parser
         @define_production('Document', @at_least_one( @re('abc')))
 
-      p = new TestParser1()
+      p = new TestParser()
 
       describe 'with none', ->
         r = p.parse('dabc')
@@ -23,7 +26,7 @@ describe 'Parser', ->
           assert deep_equal(r, r_correct)
     
       describe 'with two', ->
-        r = p.parse('abcabc')
+        r = p.parse('abcabcdef')
         r_correct = `{ pos: 0,
   length: 6,
   type: 'seq',
@@ -33,66 +36,70 @@ describe 'Parser', ->
           assert deep_equal(r, r_correct)
     
     describe 'testing range', ->
-      class TestParser1 extends Parser
-        @debug = true
-        @define_production('Document', @v('range-test-1'))
-        @define_production('range-test-1', @range( @re('abc'), 3, 7, false, @re('abcdef')))
+      for i in [0..6]
+        for j in [0..6]
+          for k in [0..1]
+            # non-greedy no-suffix
+            class TestParser extends Parser
+              @define_production('Document', @seq( @range( @re('abc'), i, j, false), @re('abc'.repeat(k) + 'def')))
+            p = new TestParser()
 
-      class TestParser2 extends Parser
-        @debug = true
-        @define_production('Document', @v('range-test-2'))
-        @define_production('range-test-2', @range( @re('abc'), 3, 7, true, @re('abcdef')))
+            for m in [0..5]
+              describe 'non-greedy no-suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                r = p.parse('abc'.repeat(m) + 'def')
 
-      class TestParser3 extends Parser
-        @debug = true
-        @define_production('Document', @seq( @v('range-test-3'), @re('abcdef')))
-        @define_production('range-test-3', @range( @re('abc'), 3, 7, true))
+                if i + k == m and i <= j
+                  it 'should parse', -> assert r?
+                else
+                  it 'should not parse', -> assert not r?
 
-      tp1 = new TestParser1()
-      tp2 = new TestParser2()
-      tp3 = new TestParser3()
+            # greedy no-suffix
+            class TestParser extends Parser
+              @define_production('Document', @seq( @range( @re('abc'), i, j, true), @re('abc'.repeat(k) + 'def')))
+            p = new TestParser()
 
-      describe 'non-greedy with suffix', ->
-        r = tp1.parse('abcabcabcabcdef')
-        r_correct = `{ pos: 0,
-          length: 15,
-          type: 'seq',
-          seq: 
-           [ { pos: 0, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
-             { pos: 3, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
-             { pos: 6, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
-             { pos: 9,
-               length: 6,
-               type: 're',
-               match: 'abcdef',
-               groups: [ 'abcdef' ] } ] }`
+            for m in [0..5]
+              describe 'greedy no-suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                r = p.parse('abc'.repeat(m) + 'def')
 
-        it 'should parse', ->
-          assert deep_equal(r, r_correct)
+                if k == 0
+                  if i <= m and j >= m
+                    it 'should parse', -> assert r?
+                  else
+                    it 'should not parse', -> assert not r?
+                else
+                  if j + k == m and i <= j
+                    it 'should parse', -> assert r?
+                  else
+                    it 'should not parse', -> assert not r?
 
-      describe 'greedy with suffix', ->
-        r = tp2.parse('abcabcabcabcdef')
-        r_correct = `{ pos: 0,
-          length: 15,
-          type: 'seq',
-          seq: 
-           [ { pos: 0, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
-             { pos: 3, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
-             { pos: 6, length: 3, type: 're', match: 'abc', groups: [ 'abc' ] },
-             { pos: 9,
-               length: 6,
-               type: 're',
-               match: 'abcdef',
-               groups: [ 'abcdef' ] } ] }`
+            # non-greedy suffix
+            class TestParser extends Parser
+              @define_production('Document', @range( @re('abc'), i, j, false, @re('abc'.repeat(k) + 'def')))
+            p = new TestParser()
 
-        it 'should parse', ->
-          assert deep_equal(r, r_correct)
+            for m in [0..5]
+              describe 'non-greedy suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                r = p.parse('abc'.repeat(m) + 'def')
 
-      describe 'greedy without suffix', ->
-        r = tp3.parse('abcabcabcabcdef')
+                if i + k <= m and j + k >= m
+                  it 'should parse', -> assert r?
+                else
+                  it 'should not parse', -> assert not r?
 
-        it 'should fail', ->
-          assert not r?
+            # greedy suffix
+            class TestParser extends Parser
+              @define_production('Document', @range( @re('abc'), i, j, true, @re('abc'.repeat(k) + 'def')))
+            p = new TestParser()
+
+            for m in [0..5]
+              describe 'greedy suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                r = p.parse('abc'.repeat(m) + 'def')
+
+                if i + k <= m and j + k >= m
+                  it 'should parse', -> assert r?
+                else
+                  it 'should not parse', -> assert not r?
 
   describe 'with BBCode', ->
     element = (elt) ->
@@ -127,10 +134,10 @@ describe 'Parser', ->
               @zero_or_more(
                 @alternation(
                   @v('Element'),
-                  @v('NotSpecificCloseTag', @backref('opentag[1]'))))),
+                  @v('NotSpecificCloseTagOrText', @backref('opentag[1]'))))),
             @var_re('\\[/\\=opentag[1]\\]'))))
 
-      @define_production('NotSpecificCloseTag',
+      @define_production('NotSpecificCloseTagOrText',
         @transform(text, @var_re('\\[/(?!\\=arg[0]\\])[^\\]]*\\]|\\[(?:[^/][^\\]]*)?\\]|[^\\[]+')))
 
       @define_production('TagOrText', @transform(text, @re('\\[[^\\]]*\\]|[^\\[]+')))
