@@ -31,7 +31,7 @@ class Parser
 
   debug_log: (f) ->
     if this.constructor.debug
-      [ name, idx, outcome, data ] = f()
+      [ name, idx, outcome, data ] = f.call(this)
       '%-15s %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
 
   match_alternation: (varargs) ->
@@ -149,11 +149,11 @@ class Parser
   match_re: (rre, match_name) -> (vdata, idx) ->
     m = rre.exec @str.substr idx
     if m
-      this.debug_log -> [ 're', idx, 'success', inspect rre.source ]
+      this.debug_log -> [ 're', idx, 'success', this.strip_quotes inspect rre.source ]
       vdata[match_name] = m[0..-1] if match_name?
       [ m[0].length, { pos: idx, length: m[0].length, type: 're', match: m[0], groups: m[0..-1] } ]
     else
-      this.debug_log -> [ 're', idx, 'fail', inspect rre.source ]
+      this.debug_log -> [ 're', idx, 'fail', this.strip_quotes inspect rre.source ]
       undefined
 
   match_seq: (varargs) ->
@@ -198,11 +198,17 @@ class Parser
     work
 
   string_abbrev: (start, n) ->
-    istr = inspect @str
-    istr = istr.substr 1, istr.length-2
+    istr = this.strip_quotes inspect @str
     if istr.length < start + n
       istr.substr(start)
     else
       istr.substr(start, n - 3) + '...'
+
+  strip_quotes: (str) ->
+    m = /^'(.*)'$/.exec(str)
+    if m
+      m[1]
+    else
+      str
 
 exports.Parser = Parser
