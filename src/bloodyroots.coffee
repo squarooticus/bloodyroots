@@ -34,14 +34,6 @@ class Parser
       [ name, idx, outcome, data ] = f()
       '%-15s %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
 
-  string_abbrev: (start, n) ->
-    istr = inspect @str
-    istr = istr.substr 1, istr.length-2
-    if istr.length < start + n
-      istr.substr(start)
-    else
-      istr.substr(start, n - 3) + '...'
-
   match_alternation: (varargs) ->
     if typeIsArray varargs
       beta_seq = varargs
@@ -71,7 +63,7 @@ class Parser
     this.debug_log -> [ 'range', idx, 'begin',
       '%s min=%s max=%s greedy=%s%s'.sprintf beta.name, min, (if max? then max else ''),
         greedy, (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
-    return undefined if min > max
+    return undefined if max? and min > max
     count = 0
     progress = 0
     work = []
@@ -204,5 +196,13 @@ class Parser
       mstr ?= ''
       work = work.substr(0, m.index) + re_quote(mstr) + work.substr(m.index + m[0].length)
     work
+
+  string_abbrev: (start, n) ->
+    istr = inspect @str
+    istr = istr.substr 1, istr.length-2
+    if istr.length < start + n
+      istr.substr(start)
+    else
+      istr.substr(start, n - 3) + '...'
 
 exports.Parser = Parser
