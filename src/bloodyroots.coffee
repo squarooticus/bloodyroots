@@ -179,7 +179,7 @@ class Parser
     this.debug_log -> [ 'v', idx, 'begin', alpha_s ]
     new_vdata = { }
     new_vdata.arg = argf.call this, vdata if argf?
-    m = this[alpha_s] new_vdata, idx
+    m = this.vcache(alpha_s, idx, new_vdata)
     this.debug_log -> [ 'v', idx + (if m? then m[0] else 0), (if m? then 'success' else 'fail'), alpha_s ]
     m
 
@@ -201,6 +201,7 @@ class Parser
 
   parse: (str) ->
     @str = str
+    @v_cache = {}
     this.debug_log -> [ 'parse', 0, 'begin' ]
     doc = this.Document { }, 0
     unless doc?
@@ -231,5 +232,13 @@ class Parser
       m[1]
     else
       str
+
+  vcache: (alpha_s, idx, vdata) ->
+    cache_key = [ alpha_s, idx, JSON.stringify(vdata) ].join('#')
+    if @v_cache.hasOwnProperty(cache_key)
+      this.debug_log -> [ 'vcache', idx, 'cached' ]
+      return @v_cache[cache_key]
+    else
+      @v_cache[cache_key] = this[alpha_s] vdata, idx
 
 exports.Parser = Parser

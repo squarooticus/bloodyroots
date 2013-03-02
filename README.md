@@ -15,10 +15,7 @@ See `test/parser.coffee` for a good example of how to implement a grammar: `BBCo
 
 ## To do:
 
-1. Provide systematic logging for assistance in developing grammars.
-2. Memoize the output of parsing whole productions for optimization of backtracking, keyed on production name, `idx`, and input `vdata`
-3. Implement more comprehensive test coverage.
-4. Clean up the code and structure as I learn Node.js better. Please provide feedback if something is not working as it should within the ecosystem: it has been difficult to piece together the "right" way to do things through the results of Google searches.
+1. Clean up the code and structure as I learn Node.js better. Please provide feedback if something is not working as it should within the ecosystem: it has been difficult to piece together the "right" way to do things through the results of Google searches.
 
 ## License
 

@@ -240,6 +240,8 @@ describe 'Parser', ->
       }
 
     class BBCodeParser extends Parser
+      @debug = true
+      
       @define_production('Document',
         @transform(seq2array,
           @zero_or_more(
