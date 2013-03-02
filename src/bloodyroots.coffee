@@ -50,10 +50,10 @@ class Parser
           if suffix?
             m2 = suffix.op.call this, vdata, idx + m[0]
             if m2?
-              this.debug_log -> [ 'alternation', idx, 'success', 'count='+(i+1) ]
+              this.debug_log -> [ 'alternation', idx + m[0] + m2[0], 'success', 'count='+(i+1) ]
               return [ m[0] + m2[0], { pos: idx, length: m[0] + m2[0], type: 'seq', seq: [ m[1], m2[1] ] } ]
           else
-            this.debug_log -> [ 'alternation', idx, 'success', 'count=%d'.sprintf (i+1) ]
+            this.debug_log -> [ 'alternation', idx + m[0], 'success', 'count=%d'.sprintf (i+1) ]
             return m
         i++
       this.debug_log -> [ 'alternation', idx, 'fail' ]
@@ -159,34 +159,54 @@ class Parser
   match_seq: (varargs) ->
     beta_seq = [].splice.call arguments, 0
     (vdata, idx) ->
+      this.debug_log -> [ 'seq', idx, 'begin', (beta.name for beta in beta_seq) ]
       progress = 0
       work = [ ]
+      i = 0
       for beta in beta_seq
+        this.debug_log -> [ 'seq', idx + progress, 'i='+i, beta.name ]
         m = beta.op.call this, vdata, idx + progress
-        return undefined unless m?
+        unless m?
+          this.debug_log -> [ 'seq', idx + progress, 'fail' ]
+          return undefined
         progress += m[0]
         work.push m[1]
+        i++
+      this.debug_log -> [ 'seq', idx + progress, 'success' ]
       [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
 
   match_v: (alpha_s, argf) -> (vdata, idx) ->
+    this.debug_log -> [ 'v', idx, 'begin', alpha_s ]
     new_vdata = { }
     new_vdata.arg = argf.call this, vdata if argf?
-    this[alpha_s] new_vdata, idx
+    m = this[alpha_s] new_vdata, idx
+    this.debug_log -> [ 'v', idx + (if m? then m[0] else 0), (if m? then 'success' else 'fail'), alpha_s ]
+    m
 
   match_var_re: (re_str, match_name) -> (vdata, idx) ->
     this.match_re(RegExp('^(?:' + this.replace_backreferences(re_str, vdata) + ')'), match_name).call this, vdata, idx
 
   op_transform: (f, beta) -> (vdata, idx) ->
+    this.debug_log -> [ 'transform', idx, 'begin', beta.name ]
     m = beta.op.call this, vdata, idx
-    return undefined unless m?
+    unless m?
+      this.debug_log -> [ 'transform', idx, 'fail', beta.name ]
+      return undefined
     tm = f m[1], vdata, idx
-    return undefined unless tm?
+    unless tm?
+      this.debug_log -> [ 'transform', idx + m[0], 'fail', 'transform' ]
+      return undefined
+    this.debug_log -> [ 'transform', idx + m[0], 'success' ]
     [ m[0], tm ]
 
   parse: (str) ->
     @str = str
+    this.debug_log -> [ 'parse', 0, 'begin' ]
     doc = this.Document { }, 0
-    return undefined unless doc?
+    unless doc?
+      this.debug_log -> [ 'parse', 0, 'fail' ]
+      return undefined
+    this.debug_log -> [ 'parse', doc[0], 'success' ]
     doc[1]
 
   replace_backreferences: (re_str, vdata) ->
@@ -198,11 +218,12 @@ class Parser
     work
 
   string_abbrev: (start, n) ->
-    istr = this.strip_quotes inspect @str
-    if istr.length < start + n
-      istr.substr(start)
+    istr = @str.substr(start)
+    istr = this.strip_quotes inspect istr
+    if istr.length > n
+      istr.substr(0, n - 3) + '...'
     else
-      istr.substr(start, n - 3) + '...'
+      istr
 
   strip_quotes: (str) ->
     m = /^'(.*)'$/.exec(str)
