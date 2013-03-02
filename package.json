@@ -1,6 +1,6 @@
 {
   "name": "bloodyroots",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Recursive descent parser",
   "main": "bloodyroots.js",
   "directories": {
