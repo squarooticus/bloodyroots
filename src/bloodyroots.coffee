@@ -11,18 +11,18 @@ class Parser
 
   @define_grammar_operation: (name, op_f) ->
     this[name] = (args...) ->
-      { name: name, op: if op_f? then op_f.apply this, args else @prototype['match_' + name].apply this, args }
+      { name: name, op: if op_f? then op_f.apply this, args else this['match_' + name].apply this, args }
 
-  @define_grammar_operation 'at_least_one', (beta, suffix) -> @prototype.match_range beta, 1, undefined, true, suffix
+  @define_grammar_operation 'at_least_one', (beta, suffix) -> @match_range(beta, 1, undefined, true, suffix)
   @define_grammar_operation 'alternation'
   @define_grammar_operation 'range'
-  @define_grammar_operation 're', (re_str, match_name) -> @prototype.match_re RegExp('^(?:' + re_str + ')'), match_name
+  @define_grammar_operation 're', (re_str, match_name) -> @match_re(RegExp('^(?:' + re_str + ')'), match_name)
   @define_grammar_operation 'seq'
-  @define_grammar_operation 'transform', (f, beta) -> @prototype.op_transform f, beta
+  @define_grammar_operation 'transform', (f, beta) -> @op_transform(f, beta)
   @define_grammar_operation 'v'
   @define_grammar_operation 'var_re'
-  @define_grammar_operation 'zero_or_more', (beta, suffix) -> @prototype.match_range beta, 0, undefined, true, suffix
-  @define_grammar_operation 'zero_or_one', (beta, suffix) -> @prototype.match_range beta, 0, 1, true, suffix
+  @define_grammar_operation 'zero_or_more', (beta, suffix) -> @match_range(beta, 0, undefined, true, suffix)
+  @define_grammar_operation 'zero_or_one', (beta, suffix) -> @match_range(beta, 0, 1, true, suffix)
 
   @backref: (ref) -> (vdata) ->
     m = /^([^\[]*)\[([0-9]*)\]/.exec(ref)
@@ -33,7 +33,7 @@ class Parser
       [ name, idx, outcome, data ] = f.call(this)
       '%-15s %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
 
-  match_alternation: (varargs) ->
+  @match_alternation: (varargs) ->
     if typeIsArray varargs
       beta_seq = varargs
       suffix = arguments[1]
@@ -58,7 +58,7 @@ class Parser
       this.debug_log -> [ 'alternation', idx, 'fail' ]
       undefined
 
-  match_range: (beta, min=0, max, greedy=true, suffix) -> (vdata, idx) ->
+  @match_range: (beta, min=0, max, greedy=true, suffix) -> (vdata, idx) ->
     this.debug_log -> [ 'range', idx, 'begin',
       '%s min=%s max=%s greedy=%s%s'.sprintf beta.name, min, (if max? then max else ''),
         greedy, (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
@@ -145,7 +145,7 @@ class Parser
     this.debug_log -> [ 'range', idx + progress, 'fail', 'greedy backtracking' ]
     undefined
 
-  match_re: (rre, match_name) -> (vdata, idx) ->
+  @match_re: (rre, match_name) -> (vdata, idx) ->
     m = rre.exec @str.substr idx
     if m
       this.debug_log -> [ 're', idx, 'success', this.strip_quotes inspect rre.source ]
@@ -155,7 +155,7 @@ class Parser
       this.debug_log -> [ 're', idx, 'fail', this.strip_quotes inspect rre.source ]
       undefined
 
-  match_seq: (beta_seq...) ->
+  @match_seq: (beta_seq...) ->
     (vdata, idx) ->
       this.debug_log -> [ 'seq', idx, 'begin', (beta.name for beta in beta_seq) ]
       progress = 0
@@ -173,7 +173,7 @@ class Parser
       this.debug_log -> [ 'seq', idx + progress, 'success' ]
       [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
 
-  match_v: (alpha_s, argf) -> (vdata, idx) ->
+  @match_v: (alpha_s, argf) -> (vdata, idx) ->
     this.debug_log -> [ 'v', idx, 'begin', alpha_s ]
     new_vdata = { }
     new_vdata.arg = argf.call this, vdata if argf?
@@ -181,10 +181,12 @@ class Parser
     this.debug_log -> [ 'v', idx + (if m? then m[0] else 0), (if m? then 'success' else 'fail'), alpha_s ]
     m
 
-  match_var_re: (re_str, match_name) -> (vdata, idx) ->
-    this.match_re(RegExp('^(?:' + this.replace_backreferences(re_str, vdata) + ')'), match_name).call this, vdata, idx
+  @match_var_re: (re_str, match_name) ->
+    self = this
+    (vdata, idx) ->
+      self.match_re(RegExp('^(?:' + this.replace_backreferences(re_str, vdata) + ')'), match_name).call this, vdata, idx
 
-  op_transform: (f, beta) -> (vdata, idx) ->
+  @op_transform: (f, beta) -> (vdata, idx) ->
     this.debug_log -> [ 'transform', idx, 'begin', beta.name ]
     m = beta.op.call this, vdata, idx
     unless m?
