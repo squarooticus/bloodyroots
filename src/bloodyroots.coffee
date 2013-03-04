@@ -58,91 +58,74 @@ class Parser
       this.debug_log -> [ 'alternation', idx, 'fail' ]
       undefined
 
-  @match_range: (beta, min=0, max, greedy=true, suffix) -> (vdata, idx) ->
-    this.debug_log -> [ 'range', idx, 'begin',
-      '%s min=%s max=%s greedy=%s%s'.sprintf beta.name, min, (if max? then max else ''),
-        greedy, (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
-    return undefined if max? and min > max
-    count = 0
-    progress = 0
-    work = []
-    # This logic is complex because of all the cases (and because I
-    # don't want to do it recursively, which would simplify the logic
-    # but expose the parser to range limitations), so I'll explain
-    # with invariants to make the explanation clearer. If anyone can
-    # think of a way to break this up into smaller bits, by all means.
-    #
-    # First, try to get to min matches and bail out if that fails.
-    while count < min
-      this.debug_log -> [ 'range', idx + progress, 'i='+count, '<min' ]
-      m = beta.op.call this, vdata, idx + progress
-      unless m?
-        this.debug_log -> [ 'range', idx + progress, 'fail' ]
-        return undefined
-      progress += m[0]
-      work.push m[1]
-      count++
-    # invariant: count == min.
-    #
-    # If we're not greedy, check the suffix before we start moving up
-    # to max, or return successfully if there is no suffix.
-    if not greedy
-      if suffix?
-        m = suffix.op.call this, vdata, idx + progress
-        if m?
-          progress += m[0]
-          work.push m[1]
-          this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d non-greedy'.sprintf(count) ]
-          return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
-      else
-        this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d non-greedy no-suffix trivial'.sprintf(count) ]
-        return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
-    # invariant: greedy || suffix?
-    #
-    # Now, count up to max or the last match. If greedy, wait until
-    # the downswing before checking suffix, saving the string indexes
-    # to check on the way back down; otherwise, check on the way up
-    # and succeed if the suffix matches.
-    greedy_progress = [ progress ] if greedy
-    while not max? or count < max
-      this.debug_log -> [ 'range', idx + progress, 'i='+count, '>=min' ]
-      m = beta.op.call this, vdata, idx + progress
-      break unless m?
-      progress += m[0]
-      work.push m[1]
-      count++
-      if greedy
-        greedy_progress.push(progress)
-      else
-        m2 = suffix.op.call this, vdata, idx + progress
-        if m2?
-          progress += m2[0]
-          work.push m2[1]
-          this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d non-greedy'.sprintf(count) ]
-          return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
-    # If we're not greedy, we failed, so bail out.
-    unless greedy
-      this.debug_log -> [ 'range', idx + progress, 'fail', '>=min non-greedy' ]
-      return undefined
-    # We're greedy. Go back down through the saved greedy indexes,
-    # checking to see if the suffix matches.
+  @match_range: (beta, min=0, max, greedy=true, suffix) ->
+    if greedy
+      @match_greedy_range(beta, min, max, suffix)
+    else
+      @match_nongreedy_range(beta, min, max, suffix)
+
+  @match_greedy_range: (beta, min, max, suffix) -> (vdata, idx) ->
+    return unless state = @_begin_range_match(beta, min, max, true, vdata, idx)
+    greedy_progress = [ state.progress ]
+    @_range_matcher beta, max, vdata, idx, state, =>
+      greedy_progress.push(state.progress)
+      false
     while greedy_progress.length
-      progress = greedy_progress.pop()
-      this.debug_log -> [ 'range', idx + progress, 'i='+count, 'greedy backtracking' ]
-      if suffix
-        m2 = suffix.op.call this, vdata, idx + progress
-        if m2?
-          progress += m2[0]
-          work.push m2[1]
-          this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d greedy backtracking'.sprintf(count) ]
-          return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
-      else
-        this.debug_log -> [ 'range', idx + progress, 'success', 'count=%d greedy backtracking no-suffix'.sprintf(count) ]
-        return [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
-      work.pop()
-      count--
-    # No match. Fail.
-    this.debug_log -> [ 'range', idx + progress, 'fail', 'greedy backtracking' ]
+      state.progress = greedy_progress.pop()
+      this.debug_log -> [ 'range', idx + state.progress, 'i='+state.count, 'greedy backtracking' ]
+      return result if result = @_match_range_suffix(suffix, vdata, idx, state)
+      state.work.pop()
+      state.count--
+    this.debug_log -> [ 'range', idx + state.progress, 'fail', 'greedy backtracking' ]
+    undefined
+
+  @match_nongreedy_range: (beta, min, max, suffix) -> (vdata, idx) ->
+    return unless state = @_begin_range_match(beta, min, max, false, vdata, idx)
+    @_match_range_suffix(suffix, vdata, idx, state) or @_range_matcher(beta, max, vdata, idx, state, =>
+      if (m = suffix.op.call this, vdata, idx + state.progress)?
+        state.progress += m[0]
+        state.work.push m[1]
+        this.debug_log -> [ 'range', idx + state.progress, 'success', 'count=%d non-greedy'.sprintf(state.count) ]
+        return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
+    ) or (this.debug_log( -> [ 'range', idx + state.progress, 'fail', '>=min non-greedy' ]); undefined)
+
+  _begin_range_match: (beta, min, max, greedy, vdata, idx) ->
+    this.debug_log -> [ 'range', idx, 'begin',
+    '%s min=%s max=%s greedy=%s%s'.sprintf beta.name, min, (if max? then max else ''),
+      greedy, (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
+    return if max? and min > max
+    r = {count: 0, progress: 0, work: []}
+    while r.count < min
+      this.debug_log -> [ 'range', idx + r.progress, 'i='+r.count, '<min' ]
+      m = beta.op.call this, vdata, idx + r.progress
+      unless m?
+        this.debug_log -> [ 'range', idx + r.progress, 'fail' ]
+        return
+      r.progress += m[0]
+      r.work.push m[1]
+      r.count++
+    r
+
+  _match_range_suffix: (suffix, vdata, idx, state) ->
+    unless suffix?
+      this.debug_log -> [ 'range', idx + state.progress, 'success', 'count=%d non-greedy no-suffix trivial'.sprintf(state.count) ]
+      return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
+    if suffix? and (m = suffix.op.call this, vdata, idx + state.progress)?
+      state.progress += m[0]
+      state.work.push m[1]
+      this.debug_log -> [ 'range', idx + state.progress, 'success', 'count=%d non-greedy'.sprintf(state.count) ]
+      return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
+
+  _range_matcher: (beta, max, vdata, idx, state, func) ->
+    while not max? or state.count < max
+      this.debug_log -> [ 'range', idx + state.progress, 'i='+state.count, '>=min' ]
+      m = beta.op.call this, vdata, idx + state.progress
+      break unless m?
+      state.progress += m[0]
+      state.work.push m[1]
+      state.count++
+      if output = func()
+        return output
     undefined
 
   @match_re: (rre, match_name) -> (vdata, idx) ->
