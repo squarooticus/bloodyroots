@@ -192,7 +192,7 @@ class Parser
     unless m?
       this.debug_log -> [ 'transform', idx, 'fail', beta.name ]
       return undefined
-    tm = f m[1], vdata, idx
+    tm = f.call this, m[1], vdata, idx
     unless tm?
       this.debug_log -> [ 'transform', idx + m[0], 'fail', 'transform' ]
       return undefined
