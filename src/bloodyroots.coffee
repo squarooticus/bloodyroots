@@ -10,8 +10,7 @@ class Parser
       beta.op.call(this, vdata, idx)
 
   @define_grammar_operation: (name, op_f) ->
-    this[name] = (varargs) ->
-      args = [].splice.call arguments, 0
+    this[name] = (args...) ->
       { name: name, op: if op_f? then op_f.apply this, args else @prototype['match_' + name].apply this, args }
 
   @define_grammar_operation 'at_least_one', (beta, suffix) -> @prototype.match_range beta, 1, undefined, true, suffix
@@ -156,8 +155,7 @@ class Parser
       this.debug_log -> [ 're', idx, 'fail', this.strip_quotes inspect rre.source ]
       undefined
 
-  match_seq: (varargs) ->
-    beta_seq = [].splice.call arguments, 0
+  match_seq: (beta_seq...) ->
     (vdata, idx) ->
       this.debug_log -> [ 'seq', idx, 'begin', (beta.name for beta in beta_seq) ]
       progress = 0
