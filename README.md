@@ -19,47 +19,47 @@ Context free grammars use productions V of the form α→β, where α is a singl
 
 It is useful to understand regular expressions, as the grammar operations in this parser correspond to regular expression operations.
 
-- `@alternation(β_1, β_2, ..., β_n)` or `@alternation( [β_1, β_2, ..., β_n], β_suffix)`: Equivalent to the `...|...|...` from regular expressions: given a sequence of βs, it produces a parse tree from the first `β_i` that parses. Unlike regular expressions, however, the default behavior is to commit to a particular `β_i` from the given sequence and not backtrack if what follows does not parse. So, for example, while `(aaa|aa)ab` will match the string `aaab`, the β tree
+-   `@alternation(β_1, β_2, ..., β_n)` or `@alternation( [β_1, β_2, ..., β_n], β_suffix)`: Equivalent to the `...|...|...` from regular expressions: given a sequence of βs, it produces a parse tree from the first `β_i` that parses. Unlike regular expressions, however, the default behavior is to commit to a particular `β_i` from the given sequence and not backtrack if what follows does not parse. So, for example, while `(aaa|aa)ab` will match the string `aaab`, the β tree
 
 		@seq(@alternation(@re('aaa'), @re('aa')), @re('ab'))
 
-	will not parse `aaab` because `@re('aaa')` will have matched and the alternation considered committed before checking whether `@re('ab')` matches. The regular expression-like behavior can be achieved by specifying the alternation's β sequence as an array in the first argument and the suffix β tree as the second argument:
+    will not parse `aaab` because `@re('aaa')` will have matched and the alternation considered committed before checking whether `@re('ab')` matches. The regular expression-like behavior can be achieved by specifying the alternation's β sequence as an array in the first argument and the suffix β tree as the second argument:
 
 		@alternation([@re('aaa'), @re('aa')], @re('ab'))
 
-	Note, however, that this will result in backtracking and so is less efficient than writing a different set of productions for the same grammar that does not require backtracking.
+    Note, however, that this will result in backtracking and so is less efficient than writing a different set of productions for the same grammar that does not require backtracking.
 
-	When `β_suffix` is specified, returns a DOM tree node of `type: 'seq'` with the output from parsing according to the matching `β_i` as the first element and the output of parsing according to `β_suffix` as the second element of an array under key `seq`; when `suffix` is not specified, returns precisely what parsing `β_i` returned.
+    When `β_suffix` is specified, returns a DOM tree node of `type: 'seq'` with the output from parsing according to the matching `β_i` as the first element and the output of parsing according to `β_suffix` as the second element of an array under key `seq`; when `suffix` is not specified, returns precisely what parsing `β_i` returned.
 
-- `@range(β, min=0, max, greedy=true, β_suffix)`: Equivalent to `(...){n,m}` from regular expressions: it matches at least `n` and at most `m` repetitions of the given `β`. As with `@alternation`, one needs to specify a `β_suffix` to force backtracking if the range match should not commit after finding the minimum `>= min` (non-greedy) or the maximum `<= max` (greedy) number of consecutive matches. There are several shorthands based on `@range`:
+-   `@range(β, min=0, max, greedy=true, β_suffix)`: Equivalent to `(...){n,m}` from regular expressions: it matches at least `n` and at most `m` repetitions of the given `β`. As with `@alternation`, one needs to specify a `β_suffix` to force backtracking if the range match should not commit after finding the minimum `>= min` (non-greedy) or the maximum `<= max` (greedy) number of consecutive matches. There are several shorthands based on `@range`:
 
-	- `@at_least_one(β, β_suffix)` is equivalent to `@range(β, 1, undefined, true, β_suffix)`: think `+` from regular expressions.
-	- `@zero_or_more(β, β_suffix)` is equivalent to `@range(β, 0, undefined, true, β_suffix)`: think `*` from regular expressions.
-	- `@zero_or_one(β, β_suffix)` is equivalent to `@range(β, 0, 1, true, β_suffix)`: think `?` from regular expressions (as applied to a terminal, not as applied to force non-greediness)
+    -   `@at_least_one(β, β_suffix)` is equivalent to `@range(β, 1, undefined, true, β_suffix)`: think `+` from regular expressions.
+    -   `@zero_or_more(β, β_suffix)` is equivalent to `@range(β, 0, undefined, true, β_suffix)`: think `*` from regular expressions.
+    -   `@zero_or_one(β, β_suffix)` is equivalent to `@range(β, 0, 1, true, β_suffix)`: think `?` from regular expressions (as applied to a terminal, not as applied to force non-greediness)
 
-	Note that using non-greediness without a suffix always returns either `min` matches or fails to parse.
+    Note that using non-greediness without a suffix always returns either `min` matches or fails to parse.
 
-	Returns a DOM tree node of `type: 'seq'` with an array of the output from each `β` parsing iteration (plus the matched `β_suffix`, if any) under key `seq`.
+    Returns a DOM tree node of `type: 'seq'` with an array of the output from each `β` parsing iteration (plus the matched `β_suffix`, if any) under key `seq`.
 
-- `@re(re_str, match_name)`: Matches the given regular expression. If `match_name` is specified, then the resulting match array (index `0` being the full matched string, index `n>=1` being the `n`th capture group) is assigned the given name. See `@var_re` for the use of this named match array.
+-   `@re(re_str, match_name)`: Matches the given regular expression. If `match_name` is specified, then the resulting match array (index `0` being the full matched string, index `n>=1` being the `n`th capture group) is assigned the given name. See `@var_re` and `@backref` for the use of this named match array.
 
-	Returns a DOM tree node of `type: 're'` with the entire string under key `match` and the named groups (including the entire string again under index 0) as an array under key `groups`.
+    Returns a DOM tree node of `type: 're'` with the entire string under key `match` and the named groups (including the entire string again under index 0) as an array under key `groups`.
 
-- `@seq(β_1, β_2, ..., β_n)`: Parses according to the given `β_i`s in order.
+-   `@seq(β_1, β_2, ..., β_n)`: Parses according to the given `β_i`s in order.
 
-	Returns a DOM tree node of `type: 'seq'` with the array of matching βs under key `seq`.
+    Returns a DOM tree node of `type: 'seq'` with the array of matching βs under key `seq`.
 
-- `@transform(f, β)`: Transforms the DOM tree resulting from parsing according to `β` using the function `f`, which takes the DOM tree, `vdata`, and the string index of the parsed substring as arguments. `this` is set to the instance of the parser.
+-   `@transform(f, β)`: Transforms the DOM tree resulting from parsing according to `β` using the function `f`, which takes the DOM tree, `vdata`, and the string index of the parsed substring as arguments. `this` is set to the instance of the parser.
 
-	The transform should not modify the input parse tree, as the original may be part of a cached entry (see [Optimizations](#optimizations) for more info) and so cause unintended behavior elsewhere in the parser.
+    The transform should not modify the input parse tree, as the original may be part of a cached entry (see [Optimizations](#optimizations) for more info) and so cause unintended behavior elsewhere in the parser.
 
-	Returns whatever the transform returns; `undefined` is considered a failure to parse.
+    Returns whatever the transform returns; `undefined` is considered a failure to parse.
 
-- `@v(α_name, argf)`: Parses the production named `α_name`, as defined by `@define_production(α_name, ...)`.
+-   `@v(α_name, argf)`: Parses the production named `α_name`, as defined by `@define_production(α_name, ...)`.
 
-	If `argf` is specified, calls `argf.call(this, vdata)` and assigns the return value to `vdata.arg` (which is passed to the grammar operations within the β tree for this production). The purpose of this second argument is to make the receiving productions variable functions of this parameter, specifically to pass backreferences from an earlier `@re` match to another production.
+    If `argf` is specified, calls `argf.call(this, vdata)` and assigns the return value to `vdata.arg` (which is passed to the grammar operations within the β tree for this production). The purpose of this second argument is to make the receiving productions variable functions of this parameter, specifically to pass backreferences from an earlier `@re` match to another production.
 
-	If, for instance, one wishes to parse XML without needing to know all schema-valid tags in advance, one needs to match a close tag to the tag that opened it. This can be performed with a non-greedy alternation, but a more efficient way to accomplish this is to use greediness combined with a forward-looking negative regular expression match on the open tag, such as in the BBCode parser from the test code:
+    If, for instance, one wishes to parse XML without needing to know all schema-valid tags in advance, one needs to match a close tag to the tag that opened it. This can be performed with a non-greedy alternation, but a more efficient way to accomplish this is to use greediness combined with a forward-looking negative regular expression match on the open tag, such as in the BBCode parser from the test code:
 
 		@define_production('Element',
 		  @seq(
@@ -73,15 +73,15 @@ It is useful to understand regular expressions, as the grammar operations in thi
 		@define_production('NotSpecificCloseTagOrText',
 		  @transform(text, @var_re('\\[/(?!\\=arg[0]\\])[^\\]]*\\]|\\[(?:[^/][^\\]]*)?\\]|[^\\[]+')))
 
-	In the first step of the `@seq`, `Element` searches for an open tag and assigns the name of the tag to `vdata.opentag`. In the second step it then parses zero or more `Element`s or `NotSpecificCloseTagOrText`s: the first case parses a full subelement (such as `[b]...[/b]`); the second case, however, parses any text or close tag *except* the close tag that matches `vdata.opentag[1]` (as `vdata.arg[0]` from `NotSpecificCloseTag`'s `vdata`). In that case, the `@zero_or_more` is done and the `@var_re` matches the specific close tag in the final step of the `@seq`.
+    In the first step of the `@seq`, `Element` searches for an open tag and assigns the name of the tag to `vdata.opentag`. In the second step it then parses zero or more `Element`s or `NotSpecificCloseTagOrText`s: the first case parses a full subelement (such as `[b]...[/b]`); the second case, however, parses any text or close tag *except* the close tag that matches `vdata.opentag[1]` (as `vdata.arg[0]` from `NotSpecificCloseTag`'s `vdata`). In that case, the `@zero_or_more` is done and the `@var_re` matches the specific close tag in the final step of the `@seq`.
 
-	Clearly, this could all be done within the `Element` production itself, but one can imagine another use of `NotSpecificCloseTagOrText` that might motivate breaking it out into its own production.
+    Clearly, this could all be done within the `Element` production itself, but one can imagine another use of `NotSpecificCloseTagOrText` that might motivate breaking it out into its own production.
 
-	See `@var_re` for information on how the argument is inserted into the regular expression.
+    See `@var_re` for information on how the argument is inserted into the regular expression.
 
-	Returns precisely what the production for the given `α_name` would return.
+    Returns precisely what the production for the given `α_name` would return.
 
-- `@var_re(re_str, match_name)`: Same as `@re`, but replaces all instances of `=arg[idx]` with `vdata.arg[idx]`. Note that this regular expression cannot be precompiled and so `@var_re` is less efficient than `@re`.
+-   `@var_re(re_str, match_name)`: Same as `@re`, but replaces all instances of `=arg[idx]` with `vdata.arg[idx]`. Note that this regular expression cannot be precompiled and so `@var_re` is less efficient than `@re`.
 
 ## Other methods
 
@@ -103,12 +103,11 @@ See `test/parser.coffee` for a good example of how to implement a grammar: `BBCo
 
 ## <a id="optimizations"></a>Optimizations
 
-If, as a result of backtracking, a particular α is parsed multiple times at the same string position with the same `vdata`, the second and subsequent attempts will return the previously cached result instead of re-parsing the string. This caching is evident in the full debug log.
+If, as a result of backtracking, a particular production is parsed multiple times at the same string position with the same `vdata`, the second and subsequent attempts will return the previously cached result instead of re-parsing the string. This caching is evident in the full debug log.
 
 ## To do
 
 1. Clean up the code and structure as I learn Node.js better. Please provide feedback if something is not working as it should within the ecosystem: it has been difficult to piece together the "right" way to do things through the results of Google searches.
-2. Simplify the logic in `match_range`. Yuck: that function is way too long because it deals with 2 cases (greedy and non-greedy) that are very different from each other.
 
 ## License
 
