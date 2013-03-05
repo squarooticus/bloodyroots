@@ -174,8 +174,6 @@ describe 'Parser', ->
                       do (m) ->
                         describe 'with non-greedy suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j), ->
                           r = p.parse('abc'.repeat(m) + 'def')
-                          console.log('with non-greedy suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j))
-                          console.log('')
 
                           if i + k <= m and (not j? or j + k >= m)
                             it 'should succeed', -> assert r?
