@@ -136,7 +136,7 @@ describe 'Parser', ->
 
                     for m in [0..5]
                       do (m) ->
-                        describe 'with non-greedy no-suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                        describe 'with non-greedy no-suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j), ->
                           r = p.parse('abc'.repeat(m) + 'def')
 
                           if i + k == m and (not j? or i <= j)
@@ -151,7 +151,7 @@ describe 'Parser', ->
 
                     for m in [0..5]
                       do (m) ->
-                        describe 'with greedy no-suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                        describe 'with greedy no-suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j), ->
                           r = p.parse('abc'.repeat(m) + 'def')
 
                           if k == 0
@@ -172,8 +172,10 @@ describe 'Parser', ->
 
                     for m in [0..5]
                       do (m) ->
-                        describe 'with non-greedy suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                        describe 'with non-greedy suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j), ->
                           r = p.parse('abc'.repeat(m) + 'def')
+                          console.log('with non-greedy suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j))
+                          console.log('')
 
                           if i + k <= m and (not j? or j + k >= m)
                             it 'should succeed', -> assert r?
@@ -187,7 +189,7 @@ describe 'Parser', ->
 
                     for m in [0..5]
                       do (m) ->
-                        describe 'with greedy suffix {%d,%d} on abc{%d}def'.sprintf(i,j,m), ->
+                        describe 'with greedy suffix m=%d k=%d i=%d j=%d'.sprintf(m,k,i,j), ->
                           r = p.parse('abc'.repeat(m) + 'def')
 
                           if i + k <= m and (not j? or j + k >= m)

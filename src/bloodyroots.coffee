@@ -7,7 +7,7 @@ typeIsArray = Array.isArray || ( value ) -> return {}.toString.call( value ) is 
 class Parser
   @define_production: (alpha_s, beta) ->
     @prototype[alpha_s] = (vdata, idx) ->
-      beta.op.call(this, vdata, idx)
+      beta.op.call this, vdata, idx
 
   @define_grammar_operation: (name, op_f) ->
     this[name] = (args...) ->
@@ -29,96 +29,85 @@ class Parser
     [ (vdata[m[1]] || [ ])[m[2]], ]
 
   debug_log: (f) ->
-    if this.constructor.debug
+    if @constructor.debug
       [ name, idx, outcome, data ] = f.call(this)
-      '%-15s %3s %-25s %-8s %s\n'.printf name, idx, this.string_abbrev(idx, 25), outcome || '', data || ''
+      '%-15s %3s %-25s %-8s %s\n'.printf name, idx, @string_abbrev(idx, 25), outcome || '', data || ''
 
-  @match_alternation: (varargs) ->
-    if typeIsArray varargs
-      beta_seq = varargs
-      suffix = arguments[1]
+  @match_alternation: (args...) ->
+    if typeIsArray args[0]
+      [ beta_seq, suffix ] = args
     else
-      beta_seq = [].splice.call arguments, 0
+      beta_seq = args
     (vdata, idx) ->
-      this.debug_log -> [ 'alternation', idx, 'begin', 'alternation=%s%s'.sprintf (beta.name for beta in beta_seq), (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
+      @debug_log -> [ 'alternation', idx, 'begin', 'alternation=%s%s'.sprintf (beta.name for beta in beta_seq), (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
       i = 0
       for beta in beta_seq
-        this.debug_log -> [ 'alternation', idx, 'i='+i, beta.name ]
+        @debug_log -> [ 'alternation', idx, 'i='+i, beta.name ]
         m = beta.op.call this, vdata, idx
         if m?
           if suffix?
             m2 = suffix.op.call this, vdata, idx + m[0]
             if m2?
-              this.debug_log -> [ 'alternation', idx + m[0] + m2[0], 'success', 'count='+(i+1) ]
+              @debug_log -> [ 'alternation', idx + m[0] + m2[0], 'success', 'count='+(i+1) ]
               return [ m[0] + m2[0], { pos: idx, length: m[0] + m2[0], type: 'seq', seq: [ m[1], m2[1] ] } ]
           else
-            this.debug_log -> [ 'alternation', idx + m[0], 'success', 'count=%d'.sprintf (i+1) ]
+            @debug_log -> [ 'alternation', idx + m[0], 'success', 'count=%d'.sprintf (i+1) ]
             return m
         i++
-      this.debug_log -> [ 'alternation', idx, 'fail' ]
-      undefined
+      @debug_log -> [ 'alternation', idx, 'fail' ]
+      return
 
   @match_range: (beta, min=0, max, greedy=true, suffix) ->
     if greedy
-      @match_greedy_range(beta, min, max, suffix)
+      @_match_greedy_range(beta, min, max, suffix)
     else
-      @match_nongreedy_range(beta, min, max, suffix)
+      @_match_nongreedy_range(beta, min, max, suffix)
 
-  @match_greedy_range: (beta, min, max, suffix) -> (vdata, idx) ->
-    return unless state = @_begin_range_match(beta, min, max, true, vdata, idx)
-    greedy_progress = [ state.progress ]
-    @_range_matcher beta, max, vdata, idx, state, =>
-      greedy_progress.push(state.progress)
+  @_match_greedy_range: (beta, min, max, suffix) -> (vdata, idx) ->
+    return unless state = @_match_range_to_min(beta, min, max, true, vdata, idx)
+    match_indices = [ state.progress ]
+    @_match_range_from_min beta, max, vdata, idx, state, =>
+      match_indices.push(state.progress)
       false
-    while greedy_progress.length
-      state.progress = greedy_progress.pop()
-      this.debug_log -> [ 'range', idx + state.progress, 'i='+state.count, 'greedy backtracking' ]
+    while match_indices.length
+      state.progress = match_indices.pop()
+      @debug_log -> [ 'range', idx + state.progress, 'i='+state.count, 'greedy backtracking' ]
       return result if result = @_match_range_suffix(suffix, vdata, idx, state)
       state.work.pop()
       state.count--
-    this.debug_log -> [ 'range', idx + state.progress, 'fail', 'greedy backtracking' ]
-    undefined
+    @debug_log -> [ 'range', idx + state.progress, 'fail', 'greedy backtracking' ]
+    return
 
-  @match_nongreedy_range: (beta, min, max, suffix) -> (vdata, idx) ->
-    return unless state = @_begin_range_match(beta, min, max, false, vdata, idx)
-    @_match_range_suffix(suffix, vdata, idx, state) or @_range_matcher(beta, max, vdata, idx, state, =>
-      if (m = suffix.op.call this, vdata, idx + state.progress)?
-        state.progress += m[0]
-        state.work.push m[1]
-        this.debug_log -> [ 'range', idx + state.progress, 'success', 'count=%d non-greedy'.sprintf(state.count) ]
-        return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
-    ) or (this.debug_log( -> [ 'range', idx + state.progress, 'fail', '>=min non-greedy' ]); undefined)
+  @_match_nongreedy_range: (beta, min, max, suffix) -> (vdata, idx) ->
+    return unless state = @_match_range_to_min(beta, min, max, false, vdata, idx)
+    @_match_range_suffix(suffix, vdata, idx, state) or @_match_range_from_min(beta, max, vdata, idx, state, =>
+      @_match_range_suffix(suffix, vdata, idx, state)
+    ) or (@debug_log( -> [ 'range', idx + state.progress, 'fail', '>=min non-greedy' ]); undefined)
 
-  _begin_range_match: (beta, min, max, greedy, vdata, idx) ->
-    this.debug_log -> [ 'range', idx, 'begin',
-    '%s min=%s max=%s greedy=%s%s'.sprintf beta.name, min, (if max? then max else ''),
-      greedy, (if suffix? then ' suffix='+suffix.name else ' no-suffix') ]
-    return if max? and min > max
-    r = {count: 0, progress: 0, work: []}
-    while r.count < min
-      this.debug_log -> [ 'range', idx + r.progress, 'i='+r.count, '<min' ]
-      m = beta.op.call this, vdata, idx + r.progress
+  _match_range_to_min: (beta, min, max, greedy, vdata, idx) ->
+    @debug_log -> [ 'range', idx, 'begin',
+      '%s min=%s max=%s %s %s'.sprintf(beta.name, min, (if max? then max else ''),
+        (if greedy then 'greedy' else 'non-greedy'),
+        (if suffix? then 'suffix='+suffix.name else 'no-suffix')) ]
+    if max? and min > max
+      @debug_log -> [ 're', idx, 'fail', 'min > max' ]
+      return
+    state = { count: 0, progress: 0, work: [], greedy: greedy }
+    while state.count < min
+      @debug_log -> [ 'range', idx + state.progress, 'i='+state.count, '<min' ]
+      m = beta.op.call this, vdata, idx + state.progress
       unless m?
-        this.debug_log -> [ 'range', idx + r.progress, 'fail' ]
+        @debug_log -> [ 'range', idx + state.progress, 'fail', '<min matches' ]
         return
-      r.progress += m[0]
-      r.work.push m[1]
-      r.count++
-    r
-
-  _match_range_suffix: (suffix, vdata, idx, state) ->
-    unless suffix?
-      this.debug_log -> [ 'range', idx + state.progress, 'success', 'count=%d non-greedy no-suffix trivial'.sprintf(state.count) ]
-      return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
-    if suffix? and (m = suffix.op.call this, vdata, idx + state.progress)?
       state.progress += m[0]
       state.work.push m[1]
-      this.debug_log -> [ 'range', idx + state.progress, 'success', 'count=%d non-greedy'.sprintf(state.count) ]
-      return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
+      state.count++
+    state
 
-  _range_matcher: (beta, max, vdata, idx, state, func) ->
+  _match_range_from_min: (beta, max, vdata, idx, state, func) ->
     while not max? or state.count < max
-      this.debug_log -> [ 'range', idx + state.progress, 'i='+state.count, '>=min' ]
+      @debug_log -> [ 'range', idx + state.progress, 'i='+state.count,
+        '>=min %s'.sprintf(if state.greedy then 'greedy' else 'non-greedy') ]
       m = beta.op.call this, vdata, idx + state.progress
       break unless m?
       state.progress += m[0]
@@ -126,71 +115,86 @@ class Parser
       state.count++
       if output = func()
         return output
-    undefined
+    return
+
+  _match_range_suffix: (suffix, vdata, idx, state) ->
+    if suffix?
+      if (m = suffix.op.call this, vdata, idx + state.progress)?
+        state.progress += m[0]
+        state.work.push m[1]
+        @debug_log -> [ 'range', idx + state.progress, 'success',
+          'count=%d %s'.sprintf(state.count, (if state.greedy then 'greedy' else 'non-greedy')) ]
+        return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
+      else
+        return
+    else
+      @debug_log -> [ 'range', idx + state.progress, 'success',
+        'count=%d %s'.sprintf(state.count, (if state.greedy then 'greedy' else 'non-greedy trivial')) ]
+      return [ state.progress, { pos: idx, length: state.progress, type: 'seq', seq: state.work } ]
 
   @match_re: (rre, match_name) -> (vdata, idx) ->
     m = rre.exec @str.substr idx
     if m
-      this.debug_log -> [ 're', idx, 'success', this.strip_quotes inspect rre.source ]
+      @debug_log -> [ 're', idx, 'success', @strip_quotes inspect rre.source ]
       vdata[match_name] = m[0..-1] if match_name?
       [ m[0].length, { pos: idx, length: m[0].length, type: 're', match: m[0], groups: m[0..-1] } ]
     else
-      this.debug_log -> [ 're', idx, 'fail', this.strip_quotes inspect rre.source ]
-      undefined
+      @debug_log -> [ 're', idx, 'fail', @strip_quotes inspect rre.source ]
+      return
 
   @match_seq: (beta_seq...) ->
     (vdata, idx) ->
-      this.debug_log -> [ 'seq', idx, 'begin', (beta.name for beta in beta_seq) ]
+      @debug_log -> [ 'seq', idx, 'begin', (beta.name for beta in beta_seq) ]
       progress = 0
       work = [ ]
       i = 0
       for beta in beta_seq
-        this.debug_log -> [ 'seq', idx + progress, 'i='+i, beta.name ]
+        @debug_log -> [ 'seq', idx + progress, 'i='+i, beta.name ]
         m = beta.op.call this, vdata, idx + progress
         unless m?
-          this.debug_log -> [ 'seq', idx + progress, 'fail' ]
-          return undefined
+          @debug_log -> [ 'seq', idx + progress, 'fail' ]
+          return
         progress += m[0]
         work.push m[1]
         i++
-      this.debug_log -> [ 'seq', idx + progress, 'success' ]
+      @debug_log -> [ 'seq', idx + progress, 'success' ]
       [ progress, { pos: idx, length: progress, type: 'seq', seq: work } ]
 
   @match_v: (alpha_s, argf) -> (vdata, idx) ->
-    this.debug_log -> [ 'v', idx, 'begin', alpha_s ]
+    @debug_log -> [ 'v', idx, 'begin', alpha_s ]
     new_vdata = { }
     new_vdata.arg = argf.call this, vdata if argf?
-    m = this.vcache(alpha_s, idx, new_vdata)
-    this.debug_log -> [ 'v', idx + (if m? then m[0] else 0), (if m? then 'success' else 'fail'), alpha_s ]
+    m = @vcache(alpha_s, idx, new_vdata)
+    @debug_log -> [ 'v', idx + (if m? then m[0] else 0), (if m? then 'success' else 'fail'), alpha_s ]
     m
 
   @match_var_re: (re_str, match_name) ->
     self = this
     (vdata, idx) ->
-      self.match_re(RegExp('^(?:' + this.replace_backreferences(re_str, vdata) + ')'), match_name).call this, vdata, idx
+      self.match_re(RegExp('^(?:' + @replace_backreferences(re_str, vdata) + ')'), match_name).call this, vdata, idx
 
   @op_transform: (f, beta) -> (vdata, idx) ->
-    this.debug_log -> [ 'transform', idx, 'begin', beta.name ]
+    @debug_log -> [ 'transform', idx, 'begin', beta.name ]
     m = beta.op.call this, vdata, idx
     unless m?
-      this.debug_log -> [ 'transform', idx, 'fail', beta.name ]
-      return undefined
+      @debug_log -> [ 'transform', idx, 'fail', beta.name ]
+      return
     tm = f.call this, m[1], vdata, idx
     unless tm?
-      this.debug_log -> [ 'transform', idx + m[0], 'fail', 'transform' ]
-      return undefined
-    this.debug_log -> [ 'transform', idx + m[0], 'success' ]
+      @debug_log -> [ 'transform', idx + m[0], 'fail', 'transform' ]
+      return
+    @debug_log -> [ 'transform', idx + m[0], 'success' ]
     [ m[0], tm ]
 
   parse: (str) ->
     @str = str
     @v_cache = {}
-    this.debug_log -> [ 'parse', 0, 'begin' ]
-    doc = this.Document { }, 0
+    @debug_log -> [ 'parse', 0, 'begin' ]
+    doc = @Document { }, 0
     unless doc?
-      this.debug_log -> [ 'parse', 0, 'fail' ]
-      return undefined
-    this.debug_log -> [ 'parse', doc[0], 'success' ]
+      @debug_log -> [ 'parse', 0, 'fail' ]
+      return
+    @debug_log -> [ 'parse', doc[0], 'success' ]
     doc[1]
 
   replace_backreferences: (re_str, vdata) ->
@@ -203,7 +207,7 @@ class Parser
 
   string_abbrev: (start, n) ->
     istr = @str.substr(start)
-    istr = this.strip_quotes inspect istr
+    istr = @strip_quotes inspect istr
     if istr.length > n
       istr.substr(0, n - 3) + '...'
     else
@@ -219,7 +223,7 @@ class Parser
   vcache: (alpha_s, idx, vdata) ->
     cache_key = [ alpha_s, idx, JSON.stringify(vdata) ].join('#')
     if @v_cache.hasOwnProperty(cache_key)
-      this.debug_log -> [ 'vcache', idx, 'cached' ]
+      @debug_log -> [ 'vcache', idx, 'cached' ]
       return @v_cache[cache_key]
     else
       @v_cache[cache_key] = this[alpha_s] vdata, idx
