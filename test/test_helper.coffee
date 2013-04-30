@@ -5,4 +5,4 @@ chai = require('chai')
 global.assert = chai.assert
 global.expect = chai.expect
 global.should = chai.should
-global.Parser = require('../lib/bloodyroots.js').Parser
+global.Parser = require('../build/bloodyroots.js').Parser

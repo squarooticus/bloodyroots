@@ -9,7 +9,7 @@
     "test": "test"
   },
   "scripts": {
-    "prepublish": "cake build"
+    "prepublish": "make build"
   },
   "repository": {
     "type": "git",
