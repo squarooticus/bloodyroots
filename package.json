@@ -32,6 +32,7 @@
   "dependencies": {
     "coffee-script": "*",
     "regexp-quote": "*",
+    "amdefine": ">=0.0.2",
     "sprintf.js": "*"
   },
   "devDependencies": {
