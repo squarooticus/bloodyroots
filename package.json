@@ -30,13 +30,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "coffee-script": "*",
     "regexp-quote": "*",
-    "amdefine": ">=0.0.2",
-    "sprintf.js": "*"
+    "sprintf.js": ">=0.0.5"
   },
   "devDependencies": {
+    "browserify": "*",
     "chai": "*",
+    "coffee-script": "*",
     "deep-equal": "*",
     "mocha": "*",
     "should": "*"

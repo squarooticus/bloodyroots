@@ -1,3 +1,12 @@
+inspect_orig = require('util').inspect
+inspect = (x) -> inspect_orig(x, false, null)
+deep_equal = require('deep-equal')
+chai = require('chai')
+assert = chai.assert
+expect = chai.expect
+should = chai.should
+{ Parser } = require('../lib/bloodyroots')
+
 String.prototype.repeat = (num) ->
     new Array( num + 1 ).join( this );
 
@@ -288,4 +297,3 @@ describe 'Parser', ->
 
             it 'should be accepted as text', ->
                 assert deep_equal(r, r_correct)
-
